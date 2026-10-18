@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+data/raw/*.json
+data/processed/*.parquet
+*.pt
+.pytest_cache/
+/brag*
