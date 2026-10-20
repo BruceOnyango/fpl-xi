@@ -1,10 +1,17 @@
 """Predict an UPCOMING gameweek and pick a starting lineup — before it's played.
 
 Inputs (one of): --team-id (FPL API), --squad-image (vision), --squad.
-Adjust a fetched team with --out / --in. No squad -> best XI from all players.
+Adjust a fetched team with --out / --in.
+
+--horizon N picks the squad on the best N-gameweek outlook (less single-match
+noise, the right basis for transfers). Captaincy always stays single-GW.
+
+A live availability gate drops injured/suspended/doubtful players (FPL status +
+chance_of_playing_next_round) before selection, so the XI never starts someone
+ruled out this week — the thing a lagging minutes filter can't catch.
 
 Usage:
-  python scripts/predict_upcoming.py --gw 7 --team-id 8350133 --out Szoboszlai --in Mbeumo
+  python scripts/predict_upcoming.py --gw 8 --team-id 8350133 --horizon 6
 """
 
 from __future__ import annotations
@@ -22,19 +29,21 @@ from fpl.data.repository import JsonRawDataRepository
 from fpl.features.builder import LeakFreeFeatureBuilder, FEATURE_COLUMNS
 from fpl.models import registry
 from fpl.optimization.ilp import IlpSquadOptimizer, default_constraints
+from fpl.selection.captain import pick_captain
 
 POS = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+OUT_STATUS = {"i", "s", "u", "n"}  # injured, suspended, unavailable, not in squad
 
 
 def fetch_fixtures(cfg, gw):
-    url = f"{cfg.api_base}/fixtures/?event={gw}"
-    r = requests.get(url, timeout=cfg.request_timeout_s)
+    r = requests.get(
+        f"{cfg.api_base}/fixtures/?event={gw}", timeout=cfg.request_timeout_s
+    )
     r.raise_for_status()
     return r.json()
 
 
 def future_fixture_map(fixtures):
-    """team_id -> (opponent_team, was_home). First fixture wins on a double GW."""
     m = {}
     for fx in fixtures:
         h, a = fx.get("team_h"), fx.get("team_a")
@@ -45,8 +54,20 @@ def future_fixture_map(fixtures):
     return m
 
 
+def unavailable(players, min_chance):
+    """player_id -> reason, for anyone unfit to start this week."""
+    out = {}
+    for p in players:
+        st = p.get("status", "a")
+        ch = p.get("chance_of_playing_next_round")
+        if st in OUT_STATUS:
+            out[p["id"]] = f"{p['web_name']} (status={st})"
+        elif ch is not None and ch < min_chance:
+            out[p["id"]] = f"{p['web_name']} ({ch}% chance)"
+    return out
+
+
 def inject_placeholders(history, player_team, fmap, gw):
-    """Replace any real/partial target-GW rows with a schedule-only placeholder."""
     out = {}
     nan = float("nan")
     for pid, rows in history.items():
@@ -72,6 +93,34 @@ def inject_placeholders(history, player_team, fmap, gw):
     return out
 
 
+def _horizon_train(current_train, horizon, gw):
+    """Combined training set with an N-gameweek-sum target, leak-safe. Folds in
+    past seasons from historical.parquet when present."""
+
+    def nsum(g):
+        return g[::-1].rolling(horizon, min_periods=horizon).sum()[::-1]
+
+    c = current_train.sort_values("round").copy()
+    c["target"] = c.groupby("player_id")["y"].transform(nsum)
+    c = c[c["round"] + (horizon - 1) < gw].dropna(subset=["target"])
+    parts = [c[FEATURE_COLUMNS + ["target"]]]
+
+    hist_path = HERE / "data" / "processed" / "historical.parquet"
+    if hist_path.exists():
+        h = (
+            pd.read_parquet(hist_path)
+            .sort_values(["season", "player_id", "round"])
+            .copy()
+        )
+        h["target"] = h.groupby(["season", "player_id"])["y"].transform(nsum)
+        h = h.dropna(subset=["target"])
+        parts.append(h[FEATURE_COLUMNS + ["target"]])
+        print(
+            f"training on {len(h)} historical + {len(c)} current rows (horizon {horizon})"
+        )
+    return pd.concat(parts, ignore_index=True)
+
+
 def pick_upcoming(
     players,
     history,
@@ -82,30 +131,45 @@ def pick_upcoming(
     model_name="gbm",
     squad=None,
     min_minutes=60.0,
+    horizon=1,
+    excluded=None,
 ):
+    excluded = excluded or {}
     player_team = {p["id"]: p["team"] for p in players}
     aug = inject_placeholders(history, player_team, fmap, gw)
     feats = LeakFreeFeatureBuilder().build(aug, teams=teams)
 
-    train = feats[feats["round"] < gw]
-    target = feats[feats["round"] == gw]
-    if train.empty or target.empty:
+    current_train = feats[feats["round"] < gw]
+    target_rows = feats[feats["round"] == gw]
+    if current_train.empty or target_rows.empty:
         raise SystemExit(f"no training rows, or no GW{gw} fixtures resolved")
 
-    train = train[FEATURE_COLUMNS + ["y"]]
-    _hist = HERE / "data" / "processed" / "historical.parquet"
-    if _hist.exists():  # fold in past seasons — the big data boost
-        h = pd.read_parquet(_hist)[FEATURE_COLUMNS + ["y"]]
-        train = pd.concat([train, h], ignore_index=True)
-        print(f"training on {len(h)} historical + current rows")
-
-    model = registry.create(model_name).fit(train[FEATURE_COLUMNS], train["y"])
+    squad_tr = _horizon_train(current_train, horizon, gw)
+    squad_model = registry.create(model_name).fit(
+        squad_tr[FEATURE_COLUMNS], squad_tr["target"]
+    )
+    if horizon == 1:
+        capt_model = squad_model
+    else:
+        capt_tr = _horizon_train(current_train, 1, gw)
+        capt_model = registry.create(model_name).fit(
+            capt_tr[FEATURE_COLUMNS], capt_tr["target"]
+        )
 
     meta = pd.DataFrame(players)[["id", "element_type", "team", "now_cost", "web_name"]]
-    board = target[["player_id"]].copy()
-    board["pred"] = model.predict(target[FEATURE_COLUMNS]).values
-    board["minutes_lag_1"] = target["minutes_lag_1"].values
+    board = target_rows[["player_id"]].copy()
+    board["pred"] = squad_model.predict(target_rows[FEATURE_COLUMNS]).values
+    board["capt_pred"] = capt_model.predict(target_rows[FEATURE_COLUMNS]).values
+    board["minutes_lag_1"] = target_rows["minutes_lag_1"].values
     board = board.merge(meta, left_on="player_id", right_on="id")
+
+    # live availability gate — never start someone ruled out this week
+    hit = board[board["player_id"].isin(excluded)]
+    if not hit.empty:
+        print(
+            "unavailable, excluded:", ", ".join(excluded[i] for i in hit["player_id"])
+        )
+    board = board[~board["player_id"].isin(excluded)].reset_index(drop=True)
 
     if squad:
         want = {s.strip().lower() for s in squad}
@@ -115,10 +179,10 @@ def pick_upcoming(
         print(f"matched {len(board)}/{len(squad)} of your squad")
         if missing:
             print(
-                "  not found for this GW (no fixture, or name differs from FPL):",
+                "  not found (no fixture, injured/excluded, or name differs):",
                 ", ".join(missing),
             )
-        cfg = replace(cfg, budget_cap=1000.0)  # you own them; budget doesn't bind
+        cfg = replace(cfg, budget_cap=1000.0)
     else:
         board = board[board["minutes_lag_1"] >= min_minutes].reset_index(drop=True)
 
@@ -129,8 +193,8 @@ def pick_upcoming(
     except RuntimeError:
         raise SystemExit(
             "Couldn't form a legal XI. If you passed a squad, check the names match "
-            "web_name exactly (see the matched count) and that your 15 contain at least "
-            "1 GK, 3 DEF, 2 MID and 1 FWD."
+            "web_name exactly (see the matched count) and that your available players "
+            "still cover 1 GK, 3 DEF, 2 MID and 1 FWD."
         )
     bench = (
         board[~board["id"].isin(set(xi["id"]))].sort_values("pred", ascending=False)
@@ -144,6 +208,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gw", type=int, required=True)
     ap.add_argument("--model", default="gbm")
+    ap.add_argument(
+        "--horizon",
+        type=int,
+        default=1,
+        help="pick squad on best N-gameweek outlook (captaincy stays 1-GW)",
+    )
+    ap.add_argument(
+        "--min-chance",
+        type=float,
+        default=75,
+        help="drop doubtful players below this chance_of_playing %",
+    )
     ap.add_argument(
         "--squad", default=None, help="comma-separated web_names of your 15"
     )
@@ -168,16 +244,12 @@ def main():
         help="path to a screenshot of your FPL team (read via Claude vision)",
     )
     ap.add_argument("--vision-model", default="claude-sonnet-5-5")
+    ap.add_argument("--out", default=None, help="web_names to remove (transfers out)")
     ap.add_argument(
-        "--out",
-        default=None,
-        help="web_names to remove (transfers out), comma-separated",
+        "--in", dest="in_", default=None, help="web_names to add (transfers in)"
     )
     ap.add_argument(
-        "--in",
-        dest="in_",
-        default=None,
-        help="web_names to add (transfers in), comma-separated",
+        "--no-availability", action="store_true", help="skip the injury/suspension gate"
     )
     ap.add_argument("--budget", type=float, default=None)
     args = ap.parse_args()
@@ -190,6 +262,7 @@ def main():
     history = {int(k): v for k, v in repo.load("history").items()}
     teams = {t["id"]: t for t in repo.load("teams")}
     fmap = future_fixture_map(fetch_fixtures(cfg, args.gw))
+    excluded = {} if args.no_availability else unavailable(players, args.min_chance)
 
     if args.team_id:
         from fpl.api.manager import squad_names
@@ -224,23 +297,33 @@ def main():
         )
 
     xi, bench = pick_upcoming(
-        players, history, teams, fmap, args.gw, cfg, args.model, squad
+        players,
+        history,
+        teams,
+        fmap,
+        args.gw,
+        cfg,
+        args.model,
+        squad,
+        horizon=args.horizon,
+        excluded=excluded,
     )
 
     xi = xi.copy()
     xi["pos"] = xi["element_type"].map(POS)
     xi = xi.sort_values(["element_type", "pred"], ascending=[True, False])
-    cap = xi.loc[xi["pred"].idxmax()]
-    print(f"\n=== GW{args.gw} starting XI (model={args.model}) ===")
+    cap = xi.loc[pick_captain(xi, "capt_pred")]
+    tag = f"{args.horizon}-GW outlook" if args.horizon > 1 else "1-GW"
+    print(f"\n=== GW{args.gw} starting XI (model={args.model}, {tag}) ===")
     for _, r in xi.iterrows():
         c = "  (C)" if r["web_name"] == cap["web_name"] else ""
-        print(f"  {r['pos']:3} {r['web_name']:14} pred {r['pred']:4.1f}{c}")
-    print(f"Captain: {cap['web_name']} (pred {cap['pred']:.1f}, doubled)")
+        print(f"  {r['pos']:3} {r['web_name']:14} pred {r['pred']:5.1f}{c}")
+    print(f"Captain: {cap['web_name']} (1-GW pred {cap['capt_pred']:.1f}, doubled)")
     if len(bench):
         print("Bench (auto-sub order):")
         for _, r in bench.iterrows():
             print(
-                f"  {POS[r['element_type']]:3} {r['web_name']:14} pred {r['pred']:4.1f}"
+                f"  {POS[r['element_type']]:3} {r['web_name']:14} pred {r['pred']:5.1f}"
             )
 
 

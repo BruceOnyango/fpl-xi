@@ -62,6 +62,16 @@ def season_features(season: str, base: str) -> pd.DataFrame:
         for el, g in use.groupby("element")
     }
     feats = LeakFreeFeatureBuilder().build(history, teams=teams)
+
+    # carry position -> element_type (GK=1, DEF=2, MID=3, FWD=4) for captaincy
+    pos_map = {"GK": 1, "GKP": 1, "DEF": 2, "MID": 3, "FWD": 4}
+    by_player = (
+        mg[["element", "position"]]
+        .drop_duplicates("element")
+        .set_index("element")["position"]
+        .map(pos_map)
+    )
+    feats["element_type"] = feats["player_id"].map(by_player)
     feats["season"] = season
     return feats
 
@@ -81,7 +91,7 @@ def main():
         frames.append(f)
 
     hist = pd.concat(frames, ignore_index=True)
-    keep = ["season", "round", "player_id", *FEATURE_COLUMNS, "y"]
+    keep = ["season", "round", "player_id", "element_type", *FEATURE_COLUMNS, "y"]
     hist[keep].to_parquet(PROC / "historical.parquet")
     print(
         f"\nhistorical: {len(hist)} rows across {len(args.seasons)} seasons "
