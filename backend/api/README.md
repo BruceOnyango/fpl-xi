@@ -77,4 +77,4 @@ python scripts/evaluate.py --horizon 1 --save     # optional: fills the "how muc
 API_RELOAD=1 python -m api                        # http://127.0.0.1:8011/fpl/docs
 python -m pytest tests/test_api.py
 ```
-Production: PM2 (`../../ecosystem.config.js`) behind nginx/Apache (`../../deploy/`). Runbook: your local `DEPLOY.local.md` (gitignored).
+Production: PM2 (`../../ecosystem.config.js`) behind a reverse proxy.

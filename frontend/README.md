@@ -55,7 +55,6 @@ The API pulls prices, injury flags, fixtures, your squad and leagues live from F
 - **API:** calls the API at **`/fpl`** on the same origin (`VITE_API_BASE_URL`).
 - **Build:** `npm run build` writes `dist/`. Production builds use the real API (`.env.production`); e2e builds use the mocks (`.env.e2e`).
 - **Serving:** in production PM2 runs `server.mjs` as **`fpl-web`** on `127.0.0.1:3011`: two cluster workers, so reloads have zero downtime. nginx/Apache forwards `/fantasy-league/` to it.
-- **Full guide:** `../DEPLOYMENT.md`, and your local runbook `../DEPLOY.local.md` (gitignored).
 
 ## Layout
 

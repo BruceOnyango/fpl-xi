@@ -1,6 +1,6 @@
 # Deployment audit — fpl-xi
 
-Audit date: 2026-10-29 · Branch: `feature/deployment` · Spec: [`../DEPLOYMENT.md`](../DEPLOYMENT.md)
+Audit date: 2026-10-29 · Branch: `feature/deployment`
 
 **How to read this.** *Before* is the repo state at `b47cfbf`, the end of `feature/dashboard`. *Finding* is that state against the spec. *After* is what changed in this branch.
 
@@ -26,7 +26,7 @@ Finding codes:
 | Check | Before | Finding | After |
 |---|---|---|---|
 | Deployable units separated at the top level | `src/`, `scripts/`, `tests/`, `requirements.txt` at the root beside `frontend/` and `backend/api` | **GAP** | Python moved under `backend/` with `git mv` (history kept). The root holds only monorepo concerns. |
-| Root is toolchain-neutral | pip and npm both at the root; one `.gitignore` mixing both | **GAP** | Root: README, `DEPLOYMENT.md`, `ecosystem.config.js`, `Makefile`, CI, `docs/`, `deploy/`, LICENSE. Python ignores scoped to `backend/`. |
+| Root is toolchain-neutral | pip and npm both at the root; one `.gitignore` mixing both | **GAP** | Root: README, `ecosystem.config.js`, `Makefile`, CI, `docs/`, LICENSE. Python ignores scoped to `backend/`. |
 | Easy to tell what's deployable vs a one-off script | Not obvious | **RISK** | `backend/` (pipeline + API) and `frontend/` (SPA), each with its own README. |
 | Dead code | Stray module-level `__init__` in `src/fpl/selection/filters.py` referencing undefined names (`PointsPredictor`, `SquadOptimizer`), found by ruff F821 | **RISK** | Removed. It was never called, and annotations aren't evaluated, so behaviour is unchanged. |
 | `--squad-image` | `predict_upcoming.py` imports `fpl.vision.squad_reader`, which doesn't exist in `src/` | **RISK** | **Not fixed (out of scope).** The flag fails with ImportError; the other inputs (`--team-id`, `--squad`) work. |
@@ -122,7 +122,7 @@ Finding codes:
 ## Open items
 
 1. **GitHub:** push, confirm the first `ci` run is green, then add branch protection on `main` requiring `ci`.
-2. **Server:** do the first deploy per the local runbook (`DEPLOY.local.md`, gitignored). Check `make install` works with `python3.12-venv` and Node ≥ 22.12, then `pm2 startup`.
+2. **Server:** do the first deploy. Check `make install` works with `python3.12-venv` and Node ≥ 22.12, then `pm2 startup`.
 3. **Local Node:** upgrade to ≥ 22.12, then `rm -rf frontend/node_modules && npm ci`.
 4. **Python lock:** consider `pip-tools`/`uv` to lock transitive deps.
 5. **`--squad-image`:** restore or remove `fpl.vision.squad_reader`.

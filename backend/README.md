@@ -2,7 +2,7 @@
 
 > This is the Python half of the `fpl-xi` monorepo. **Run every command below from
 > `backend/`.** The dashboard API lives in [`api/`](api/README.md); the web app is in
-> `../frontend/`; deployment runbook: your local `DEPLOY.local.md` (gitignored).
+> `../frontend/`.
 
 Predict Fantasy Premier League points and pick the best legal starting XI,
 captain and bench — from your own team or the whole player pool. Trained on four

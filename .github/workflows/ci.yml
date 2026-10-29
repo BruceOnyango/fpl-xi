@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Which halves changed? Jobs below only run for their own paths (DEPLOYMENT.md §4.3).
+  # Which halves changed? Jobs below only run for their own paths.
   changes:
     runs-on: ubuntu-latest
     outputs:
