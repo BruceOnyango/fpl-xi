@@ -1,0 +1,196 @@
+/*
+ * Design tokens — the only place raw colour/space/type values may appear.
+ * Components reference these through Tailwind (see index.css @theme) or var().
+ * Guide: ./tokens.md
+ *
+ * Theme resolution:
+ *   1. :root                                  light values (fallback)
+ *   2. @media (prefers-color-scheme: dark)    dark when the OS asks and no explicit light override
+ *   3. [data-theme="dark"] / [data-theme="light"] explicit user choice (set by ThemeProvider)
+ */
+
+:root {
+  /* ---------- colour: surfaces & text (light) ---------- */
+  --bg: #eef1f8;
+  --surface: #ffffff;
+  --surface-2: #f5f7fc;
+  --surface-3: #e6eaf4;
+  --border: #d5dbea;
+  --text: #0e1426;
+  --muted: #4f5a74;
+  --subtle: #6b7591;
+
+  /* accent = brand action colour; accent-text = accent used as text on surfaces */
+  /* #117a44 keeps white button text at ≥5:1 (the brighter #19a35b failed AA). */
+  --accent: #117a44;
+  --accent-strong: #0c5f35;
+  --accent-contrast: #ffffff;
+  --accent-text: #0f7a44;
+  --accent-soft: #dcf5e7;
+
+  --secondary: #6a4cff;
+  --secondary-soft: #ebe6ff;
+  --secondary-text: #4a2fd9;
+
+  --positive: #0f7a44;
+  --positive-soft: #dcf5e7;
+  --negative: #c01c3c;
+  --negative-soft: #fde4e9;
+  --warning: #8a5a00;
+  --warning-soft: #fff1cc;
+  --info: #1d5fd1;
+  --info-soft: #e2ecff;
+
+  --focus-ring: #6a4cff;
+
+  /* ---------- pitch ---------- */
+  --pitch-1: #1f8f52;
+  --pitch-2: #1a7f48;
+  --pitch-line: rgb(255 255 255 / 0.45);
+
+  /* ---------- FDR scale (fixture difficulty 1 = easiest … 5 = hardest) ---------- */
+  /* Each step carries its own foreground so the label always passes 4.5:1. */
+  --fdr-1: #00703c;
+  --fdr-1-fg: #ffffff;
+  --fdr-2: #3ddc84;
+  --fdr-2-fg: #062314;
+  --fdr-3: #d9dde6;
+  --fdr-3-fg: #1b2235;
+  --fdr-4: #d11a3a;
+  --fdr-4-fg: #ffffff;
+  --fdr-5: #7a0627;
+  --fdr-5-fg: #ffffff;
+
+  /* ---------- position colours ---------- */
+  --pos-gk: #f5b301;
+  --pos-def: #38bdf8;
+  --pos-mid: #4ade80;
+  --pos-fwd: #fb7185;
+  --pos-fg: #0b1020;
+
+  /* ---------- space (4px grid) ---------- */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* ---------- radius ---------- */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-full: 9999px;
+
+  /* ---------- type ---------- */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Barlow Condensed', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --font-size-2xs: 0.6875rem;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.375rem;
+  --font-size-2xl: 1.75rem;
+  --font-size-3xl: 2.25rem;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ---------- elevation ---------- */
+  --shadow-sm: 0 1px 2px rgb(14 20 38 / 0.06);
+  --shadow-md: 0 4px 16px rgb(14 20 38 / 0.08);
+  --shadow-lg: 0 12px 32px rgb(14 20 38 / 0.14);
+
+  /* ---------- z-index ---------- */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-nav: 20;
+  --z-overlay: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+
+  color-scheme: light;
+}
+
+/* Dark values, defined once and applied by both the media query and the explicit override. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0a0f1f;
+    --surface: #121a30;
+    --surface-2: #18223d;
+    --surface-3: #212c4b;
+    --border: #2a3657;
+    --text: #e9edf8;
+    --muted: #a3acc7;
+    --subtle: #8792b2;
+    --accent: #3ddc84;
+    --accent-strong: #2fc472;
+    --accent-contrast: #062314;
+    --accent-text: #5ee69a;
+    --accent-soft: rgb(61 220 132 / 0.14);
+    --secondary: #8b72ff;
+    --secondary-soft: rgb(139 114 255 / 0.16);
+    --secondary-text: #b3a3ff;
+    --positive: #5ee69a;
+    --positive-soft: rgb(61 220 132 / 0.14);
+    --negative: #ff7a93;
+    --negative-soft: rgb(255 82 115 / 0.16);
+    --warning: #ffc94d;
+    --warning-soft: rgb(255 201 77 / 0.14);
+    --info: #7fb0ff;
+    --info-soft: rgb(127 176 255 / 0.14);
+    --focus-ring: #b3a3ff;
+    --pitch-1: #15603a;
+    --pitch-2: #125432;
+    --pitch-line: rgb(255 255 255 / 0.3);
+    --fdr-3: #c4cad8;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
+    --shadow-md: 0 6px 20px rgb(0 0 0 / 0.35);
+    --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.45);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0a0f1f;
+  --surface: #121a30;
+  --surface-2: #18223d;
+  --surface-3: #212c4b;
+  --border: #2a3657;
+  --text: #e9edf8;
+  --muted: #a3acc7;
+  --subtle: #8792b2;
+  --accent: #3ddc84;
+  --accent-strong: #2fc472;
+  --accent-contrast: #062314;
+  --accent-text: #5ee69a;
+  --accent-soft: rgb(61 220 132 / 0.14);
+  --secondary: #8b72ff;
+  --secondary-soft: rgb(139 114 255 / 0.16);
+  --secondary-text: #b3a3ff;
+  --positive: #5ee69a;
+  --positive-soft: rgb(61 220 132 / 0.14);
+  --negative: #ff7a93;
+  --negative-soft: rgb(255 82 115 / 0.16);
+  --warning: #ffc94d;
+  --warning-soft: rgb(255 201 77 / 0.14);
+  --info: #7fb0ff;
+  --info-soft: rgb(127 176 255 / 0.14);
+  --focus-ring: #b3a3ff;
+  --pitch-1: #15603a;
+  --pitch-2: #125432;
+  --pitch-line: rgb(255 255 255 / 0.3);
+  --fdr-3: #c4cad8;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 6px 20px rgb(0 0 0 / 0.35);
+  --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.45);
+  color-scheme: dark;
+}

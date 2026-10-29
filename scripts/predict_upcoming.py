@@ -19,6 +19,10 @@ import argparse, sys
 from dataclasses import replace
 from pathlib import Path
 
+# Windows consoles default to cp1252, which can't print names like "Mitrović".
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE / "src"))
 import numpy as np
@@ -121,6 +125,85 @@ def _horizon_train(current_train, horizon, gw):
     return pd.concat(parts, ignore_index=True)
 
 
+def knn_interval(hold_pred, hold_actual, pred, k=150, q=(0.1, 0.9)):
+    """Empirical interval for each value in `pred` from its k nearest held-out predictions.
+
+    For a prediction p, take the k held-out rows whose predictions were closest to p and
+    return the q-quantiles of what those players *actually* scored. Smooth in p (so a
+    33-point and a 25-point prediction get different ranges), out-of-sample, and it
+    widens where outcomes are genuinely wider. Clipped so low <= p <= high.
+
+    Replaced a 5-bin version that gave every top player the same range and capped the
+    top bin's upside barely above the highest predictions.
+    """
+    order = np.argsort(hold_pred)
+    sp, sa = np.asarray(hold_pred)[order], np.asarray(hold_actual)[order]
+    k = min(k, len(sp))
+    starts = np.clip(np.searchsorted(sp, pred) - k // 2, 0, len(sp) - k)
+    windows = sa[starts[:, None] + np.arange(k)]
+    low = np.quantile(windows, q[0], axis=1)
+    high = np.quantile(windows, q[1], axis=1)
+    pred = np.asarray(pred, dtype=float)
+    return np.minimum(low, pred), np.maximum(high, pred)
+
+
+def _fit_with_interval(model_name, train, target_rows, q=(0.1, 0.9), holdout=0.15):
+    """Fit on (1-holdout) of `train`; interval from the held-out rows via knn_interval.
+
+    Checked on GW9/6-GW data: the 80% interval covered 88% of unseen held-out outcomes
+    overall and 78.5% among the top-10% predictions. Returns (pred, low, high).
+    """
+    rng = np.random.default_rng(0)
+    mask = rng.random(len(train)) < holdout
+    fit, hold = train[~mask], train[mask]
+    model = registry.create(model_name).fit(fit[FEATURE_COLUMNS], fit["target"])
+    hold_pred = model.predict(hold[FEATURE_COLUMNS]).values
+    pred = model.predict(target_rows[FEATURE_COLUMNS]).values
+    low, high = knn_interval(hold_pred, hold["target"].values, pred, q=q)
+    return pred, low, high
+
+
+def predict_board(players, history, teams, fmap, gw, model_name="gbm", horizon=1, interval=False):
+    """Predictions for every player with a GW `gw` fixture.
+
+    Columns: pred (horizon-sum), capt_pred (1-GW), minutes_lag_1, plus FPL meta.
+    With interval=True also pred_low/pred_high (80% empirical interval); the squad
+    model is then fit on 85% of training rows so the interval is out-of-sample.
+    """
+    player_team = {p["id"]: p["team"] for p in players}
+    aug = inject_placeholders(history, player_team, fmap, gw)
+    feats = LeakFreeFeatureBuilder().build(aug, teams=teams)
+
+    current_train = feats[feats["round"] < gw]
+    target_rows = feats[feats["round"] == gw]
+    if current_train.empty or target_rows.empty:
+        raise SystemExit(f"no training rows, or no GW{gw} fixtures resolved")
+
+    board = target_rows[["player_id"]].copy()
+    squad_tr = _horizon_train(current_train, horizon, gw)
+    if interval:
+        pred, low, high = _fit_with_interval(model_name, squad_tr, target_rows)
+        board["pred"], board["pred_low"], board["pred_high"] = pred, low, high
+        capt_pred = pred
+    else:
+        squad_model = registry.create(model_name).fit(
+            squad_tr[FEATURE_COLUMNS], squad_tr["target"]
+        )
+        board["pred"] = squad_model.predict(target_rows[FEATURE_COLUMNS]).values
+        capt_pred = board["pred"].values
+    if horizon != 1:
+        capt_tr = _horizon_train(current_train, 1, gw)
+        capt_model = registry.create(model_name).fit(
+            capt_tr[FEATURE_COLUMNS], capt_tr["target"]
+        )
+        capt_pred = capt_model.predict(target_rows[FEATURE_COLUMNS]).values
+    board["capt_pred"] = capt_pred
+    board["minutes_lag_1"] = target_rows["minutes_lag_1"].values
+
+    meta = pd.DataFrame(players)[["id", "element_type", "team", "now_cost", "web_name"]]
+    return board.merge(meta, left_on="player_id", right_on="id")
+
+
 def pick_upcoming(
     players,
     history,
@@ -135,33 +218,7 @@ def pick_upcoming(
     excluded=None,
 ):
     excluded = excluded or {}
-    player_team = {p["id"]: p["team"] for p in players}
-    aug = inject_placeholders(history, player_team, fmap, gw)
-    feats = LeakFreeFeatureBuilder().build(aug, teams=teams)
-
-    current_train = feats[feats["round"] < gw]
-    target_rows = feats[feats["round"] == gw]
-    if current_train.empty or target_rows.empty:
-        raise SystemExit(f"no training rows, or no GW{gw} fixtures resolved")
-
-    squad_tr = _horizon_train(current_train, horizon, gw)
-    squad_model = registry.create(model_name).fit(
-        squad_tr[FEATURE_COLUMNS], squad_tr["target"]
-    )
-    if horizon == 1:
-        capt_model = squad_model
-    else:
-        capt_tr = _horizon_train(current_train, 1, gw)
-        capt_model = registry.create(model_name).fit(
-            capt_tr[FEATURE_COLUMNS], capt_tr["target"]
-        )
-
-    meta = pd.DataFrame(players)[["id", "element_type", "team", "now_cost", "web_name"]]
-    board = target_rows[["player_id"]].copy()
-    board["pred"] = squad_model.predict(target_rows[FEATURE_COLUMNS]).values
-    board["capt_pred"] = capt_model.predict(target_rows[FEATURE_COLUMNS]).values
-    board["minutes_lag_1"] = target_rows["minutes_lag_1"].values
-    board = board.merge(meta, left_on="player_id", right_on="id")
+    board = predict_board(players, history, teams, fmap, gw, model_name, horizon)
 
     # live availability gate — never start someone ruled out this week
     hit = board[board["player_id"].isin(excluded)]

@@ -19,6 +19,10 @@ from __future__ import annotations
 import argparse, sys
 from pathlib import Path
 
+# Windows consoles default to cp1252, which can't print names like "Mitrović".
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE / "src"))
 import warnings
@@ -62,6 +66,38 @@ def precision_at_k(pred, actual, k):
     return len(set(np.argsort(-pred)[:k]) & set(np.argsort(-actual)[:k])) / k
 
 
+def _save_backtest(gbm, base, args):
+    """Per-GW series + summary for the dashboard's "how much to trust this" panel."""
+    import json
+    from datetime import datetime, timezone
+
+    g = gbm.merge(base, on="key", suffixes=("", "_b")).sort_values("key")
+    out = PROC / f"backtest_h{args.horizon}.json"
+    out.write_text(
+        json.dumps(
+            {
+                "model": "gbm",
+                "baseline": args.baseline,
+                "horizon": args.horizon,
+                "metric": "spearman",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "summary": {
+                    "spearman_mean": round(float(g["spearman"].mean()), 4),
+                    "spearman_std": round(float(g["spearman"].std()), 4),
+                    "beats_baseline_pct": round(float(100 * (g["spearman"] > g["spearman_b"]).mean()), 1),
+                    "held_out_gameweeks": int(len(g)),
+                },
+                "series": [
+                    {"label": r.label, "model": round(float(r.spearman), 4), "baseline": round(float(r.spearman_b), 4)}
+                    for r in g.itertuples()
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    print(f"\nsaved {len(g)} gameweeks -> {out}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -72,6 +108,12 @@ def main():
     ap.add_argument("--horizon", type=int, default=1)
     ap.add_argument("--min-minutes", type=float, default=60.0)
     ap.add_argument("--k", type=int, default=20)
+    ap.add_argument(
+        "--save",
+        action="store_true",
+        help="write per-GW gbm vs baseline Spearman to data/processed/backtest_h<N>.json "
+        "(served by the dashboard API)",
+    )
     args = ap.parse_args()
 
     path = PROC / "historical.parquet"
@@ -107,7 +149,8 @@ def main():
             sp = s["pred"].corr(s["y"], method="spearman")
             pk = precision_at_k(s["pred"].values, s["y"].values, args.k)
             mae = float(np.mean(np.abs(pred.values - test["y"].values)))
-            rank[m].append(dict(key=key, spearman=sp, precision=pk, mae=mae))
+            label = f"{test['season'].iloc[0]} GW{int(test['round'].iloc[0])}"
+            rank[m].append(dict(key=key, label=label, spearman=sp, precision=pk, mae=mae))
             if m == "gbm":
                 thr = s["y"].nlargest(3).min()
                 naive = s.loc[s["pred"].idxmax()]
@@ -144,6 +187,9 @@ def main():
             f"\ngbm vs {args.baseline}: Spearman edge mean +{e.mean():.3f}, "
             f"median +{e.median():.3f}, wins {100*(e>0).mean():.0f}% of GWs"
         )
+    if args.save and base is not None and not res["gbm"].empty:
+        _save_backtest(res["gbm"], base, args)
+
     if cap_rows:
         c = pd.DataFrame(cap_rows)
         print(
