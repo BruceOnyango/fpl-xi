@@ -20,3 +20,8 @@ backend/data/processed/*.json
 # Personal, machine-local files (deploy runbook, real proxy configs with your domain) — never committed
 *.local.md
 *.local.conf
+/deploy*
+*/.DEPLOYMENT.md
+# Deployment files: keep on this machine only
+/deploy/
+/DEPLOYMENT.md
