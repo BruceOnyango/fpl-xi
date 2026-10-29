@@ -10,19 +10,6 @@ from typing import Protocol
 import pandas as pd
 
 
-def __init__(
-    self,
-    predictor: PointsPredictor,
-    optimizer: SquadOptimizer,
-    player_meta: pd.DataFrame,
-    filters: list[CandidateFilter] | None = None,
-):
-    self._predictor = predictor
-    self._optimizer = optimizer
-    self._meta = player_meta
-    self._filters = filters or []
-
-
 class CandidateFilter(Protocol):
     def apply(self, board: pd.DataFrame) -> pd.DataFrame: ...
 

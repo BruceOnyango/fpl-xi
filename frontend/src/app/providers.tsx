@@ -1,15 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { useState, type ReactNode } from 'react';
-import { ApiError } from '@/lib/api/client';
+import { isTransient } from '@/lib/api/client';
 import { SettingsProvider } from '@/lib/settings';
 
 function makeClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        // Don't retry what won't change (404s, contract bugs); retry flaky network twice.
-        retry: (count, err) => !(err instanceof ApiError && err.kind !== 'network') && count < 2,
+        // Retry only transient failures (network, gateway 502/504 during an API restart), twice.
+        retry: (count, err) => isTransient(err) && count < 2,
         // Polite to the (unofficial) upstream: no refetch storms on tab focus.
         refetchOnWindowFocus: false,
       },

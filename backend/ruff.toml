@@ -1,0 +1,7 @@
+# Lint gate for CI: syntax errors + pyflakes (undefined names, unused imports, …).
+# Deliberately small so it catches real bugs without reformatting the ML code.
+target-version = "py312"
+extend-exclude = ["data"]
+
+[lint]
+select = ["E9", "F"]

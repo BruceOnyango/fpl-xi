@@ -75,6 +75,12 @@ class FplLive:
             self._cache[key] = (now, pulled)
         return pulled
 
+    def peek(self, key: str) -> Pulled | None:
+        """Cached value for `key` regardless of age, without fetching (for health checks)."""
+        with self._lock:
+            hit = self._cache.get(key)
+        return hit[1] if hit else None
+
     def clear(self) -> None:
         with self._lock:
             self._cache.clear()

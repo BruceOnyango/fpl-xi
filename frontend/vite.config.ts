@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
+const apiTarget = process.env.FPL_API_TARGET ?? 'http://127.0.0.1:8011';
+
 /** Matches a module path inside node_modules/<one of pkgs>/, on either path separator. */
 const vendor = (...pkgs: string[]) => new RegExp(`node_modules[/\\\\](${pkgs.join('|')})[/\\\\]`);
 
@@ -12,13 +14,14 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
-  // Deployed at bruceonyango.link/fantasy-league/. Asset URLs, the router basename and the
+  // Deployed at example.com/fantasy-league/. Asset URLs, the router basename and the
   // mock worker all derive from this (import.meta.env.BASE_URL). Override: `vite build --base /`.
   base: '/fantasy-league/',
-  // With VITE_USE_MOCKS=false the dev/preview servers forward the API's single entry point
-  // (/fpl) to the FastAPI app, mirroring the production reverse proxy.
-  server: { proxy: { '/fpl': 'http://127.0.0.1:8000' } },
-  preview: { proxy: { '/fpl': 'http://127.0.0.1:8000' } },
+  // Port parity with production: the web app runs on 3011 (PM2 `fpl-web`), the API on 8011
+  // (`fpl-api`). With VITE_USE_MOCKS=false, dev/preview forward the API's single entry point
+  // (/fpl) to it, mirroring nginx. Override the target with FPL_API_TARGET.
+  server: { port: 3011, strictPort: true, proxy: { '/fpl': apiTarget } },
+  preview: { port: 3011, strictPort: true, proxy: { '/fpl': apiTarget } },
   build: {
     rolldownOptions: {
       output: {
@@ -57,7 +60,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
-    env: { VITE_API_BASE: 'http://localhost/fpl' },
+    env: { VITE_API_BASE_URL: 'http://localhost/fpl' },
     css: false,
     // axe over full pages is slow in jsdom.
     testTimeout: 30_000,

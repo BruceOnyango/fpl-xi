@@ -10,7 +10,7 @@ Requires **Node ≥ 22.12** (Vite 8, Rolldown and Storybook 10 refuse older vers
 
 ```bash
 npm install
-npm run dev              # http://localhost:5173/fantasy-league/ — uses the mock API (MSW) by default
+npm run dev              # http://localhost:3011/fantasy-league/ — mock API (MSW) unless .env.local says otherwise
 npm run build            # typecheck + production build to dist/
 npm run preview          # serve dist/ on :4173
 npm test                 # Vitest + Testing Library + axe (jsdom)
@@ -18,39 +18,44 @@ npm run e2e              # Playwright: flows + axe sweep incl. colour contrast, 
 npm run lint             # ESLint (strict TS, jsx-a11y, atomic import rules)
 npm run format           # Prettier (+ Tailwind class sorting)
 npm run storybook        # component workbench on :6006
-npm run mock:roster      # rebuild src/mocks/data/snapshot.json from ../data/raw (after fetch_data.py)
+npm run serve            # production static server for dist/ (what PM2 `fpl-web` runs) on :3011
+npm run mock:roster      # rebuild src/mocks/data/snapshot.json from ../backend/data/raw (after fetch_data.py)
 ```
 
 Environment (`.env.local`):
 
-| Var              | Default | Meaning                                       |
-| ---------------- | ------- | --------------------------------------------- |
-| `VITE_USE_MOCKS` | on      | `false` to call a real backend instead of MSW |
-| `VITE_API_BASE` | `/fpl` | the backend's single entry point (same origin in production) |
+| Var                 | Default | Meaning                                                      |
+| ------------------- | ------- | ------------------------------------------------------------ |
+| `VITE_USE_MOCKS`    | on      | `false` to call a real backend instead of MSW                |
+| `VITE_API_BASE_URL` | `/fpl`  | the backend's single entry point (same origin in production) |
 
 ## Real data vs mock
 
 **Real (your team):** run the read-only API (`../backend/README.md`) and turn mocks off:
 
 ```bash
-# repo root
+# backend/
 python scripts/fetch_data.py && python scripts/export_predictions.py --gw <next GW>
-python -m uvicorn backend.api.main:app --reload --port 8000
-# here
-cp .env.example .env.local   # VITE_USE_MOCKS=false; dev/preview proxy /fpl → :8000
-npm run dev
+API_RELOAD=1 python -m api      # :8011
+# frontend/
+cp .env.example .env.local      # VITE_USE_MOCKS=false; dev/preview proxy /fpl → :8011
+npm run dev                     # http://localhost:3011/fantasy-league/
 ```
 
 The API pulls prices, injury flags, fixtures, your squad and leagues live from FPL, and serves your exported predictions. If the predictions are missing or made for an older gameweek, a banner tells you the command to run.
 
 **Mock (default, no backend needed):** MSW (`src/mocks/`) implements the same contract.
 
-- Real in the mock: names, clubs, prices, injury flags, deadlines (from `../data/raw`), and the README's headline model metrics.
+- Real in the mock: names, clubs, prices, injury flags, deadlines (from `../backend/data/raw`), and the README's headline model metrics.
 - Generated, and labelled "Mock data" in the UI: predictions, fixtures, squads, leagues and the per-GW backtest.
 
 ## Deployment
 
-The app is built for **`/fantasy-league/`** (Vite `base`; the router basename and asset URLs follow it), and it calls the API at **`/fpl`** on the same origin. `npm run build` produces `dist/`, which is copied to the web server. See [`../deploy/README.md`](../deploy/README.md) for nginx, Apache and systemd configs.
+- **Base path:** built for **`/fantasy-league/`** (Vite `base`; the router basename and asset URLs follow it).
+- **API:** calls the API at **`/fpl`** on the same origin (`VITE_API_BASE_URL`).
+- **Build:** `npm run build` writes `dist/`. Production builds use the real API (`.env.production`); e2e builds use the mocks (`.env.e2e`).
+- **Serving:** in production PM2 runs `server.mjs` as **`fpl-web`** on `127.0.0.1:3011`: two cluster workers, so reloads have zero downtime. nginx/Apache forwards `/fantasy-league/` to it.
+- **Full guide:** `../DEPLOYMENT.md`, and your local runbook `../DEPLOY.local.md` (gitignored).
 
 ## Layout
 

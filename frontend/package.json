@@ -16,7 +16,8 @@
     "e2e": "playwright test",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "mock:roster": "node scripts/build-mock-roster.mjs"
+    "mock:roster": "node scripts/build-mock-roster.mjs",
+    "serve": "node server.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^6.0.2",

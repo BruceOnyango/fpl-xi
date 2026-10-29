@@ -3,7 +3,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-import numpy as np
 import pandas as pd
 from fpl.config import FplConfig
 from sweep_budget import sweep_caps

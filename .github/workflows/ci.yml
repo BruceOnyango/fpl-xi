@@ -1,0 +1,111 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Which halves changed? Jobs below only run for their own paths (DEPLOYMENT.md §4.3).
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'ecosystem.config.js'
+              - '.github/workflows/ci.yml'
+            frontend:
+              - 'frontend/**'
+              - 'ecosystem.config.js'
+              - '.github/workflows/ci.yml'
+
+  backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: backend/.python-version
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - name: lint
+        run: ruff check .
+      - name: test
+        run: python -m pytest -q
+      - name: smoke-check the API starts and answers
+        run: |
+          python -m api &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8011/fpl/health && break; sleep 1; done
+          curl -sf http://127.0.0.1:8011/fpl/health | grep -q '"status":"ok"'
+      - name: dependency audit (non-blocking)
+        continue-on-error: true
+        run: pip-audit -r requirements.txt
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - name: test (Vitest + axe)
+        run: npm test
+      - name: build (production, /fantasy-league/, real API at /fpl)
+        run: npm run build
+      - run: npm run build-storybook -- --quiet
+      - run: npx playwright install --with-deps chromium
+      - name: e2e (Playwright + axe incl. colour contrast; mocks via --mode e2e)
+        run: npm run e2e
+      - name: dependency audit (non-blocking)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: frontend/playwright-report
+
+  # Single required status check for branch protection: passes when every job that
+  # needed to run passed (skipped = not affected = fine), fails otherwise.
+  ci:
+    if: always()
+    needs: [changes, backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: gate
+        run: |
+          echo "backend=${{ needs.backend.result }} frontend=${{ needs.frontend.result }}"
+          [[ "${{ needs.changes.result }}" == "success" ]]
+          [[ "${{ needs.backend.result }}" =~ ^(success|skipped)$ ]]
+          [[ "${{ needs.frontend.result }}" =~ ^(success|skipped)$ ]]

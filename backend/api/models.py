@@ -159,6 +159,17 @@ class MetaResponse(Freshness):
     model: ModelSummary | None
 
 
+class HealthResponse(Model):
+    status: Literal["ok"]
+    version: str
+    uptime_s: int
+    #: When the API last pulled from FPL (null until the first data request).
+    data_fetched_at: datetime | None
+    predictions_generated_at: datetime | None
+    predictions_gw: int | None
+    now: datetime
+
+
 class BacktestPoint(Model):
     label: str
     model: float

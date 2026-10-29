@@ -49,7 +49,7 @@ class Service:
         p = self.store.predictions()
         if p is None:
             raise NoPredictions(
-                "No predictions exported yet. Run: python scripts/export_predictions.py --gw <next GW>"
+                "No predictions exported yet. Run: cd backend && python scripts/export_predictions.py --gw <next GW>"
             )
         return p
 

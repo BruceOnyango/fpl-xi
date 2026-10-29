@@ -64,8 +64,9 @@ export function ModelConfidence({ horizon, className }: ModelConfidenceProps) {
               title="No backtest saved yet"
               description={
                 <>
-                  Run <code>python scripts/evaluate.py --horizon {horizon} --save</code> to show how
-                  the model has done week by week.
+                  Run{' '}
+                  <code>cd backend && python scripts/evaluate.py --horizon {horizon} --save</code>{' '}
+                  to show how the model has done week by week.
                 </>
               }
             />

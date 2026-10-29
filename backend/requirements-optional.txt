@@ -1,0 +1,6 @@
+# Optional extras, not needed by the API or CI:
+#   torch     — the experimental "neural" model (tests skip without it)
+#   anthropic — `predict_upcoming.py --squad-image` (needs ANTHROPIC_API_KEY)
+-r requirements.txt
+torch==2.14.1
+anthropic==0.125.0

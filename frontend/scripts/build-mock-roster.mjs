@@ -1,5 +1,5 @@
 // Builds src/mocks/data/snapshot.json from the backend's cached FPL API pulls
-// (../data/raw/*.json, produced by `python scripts/fetch_data.py`).
+// (../backend/data/raw/*.json, produced by `python scripts/fetch_data.py` in backend/).
 //
 // What is REAL here: player names, clubs, positions, prices, status/news,
 // ownership, season stats, team names, gameweek deadlines — all copied from the
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const raw = resolve(here, '../../data/raw');
+const raw = resolve(here, '../../backend/data/raw');
 const out = resolve(here, '../src/mocks/data/snapshot.json');
 
 const read = (f) => JSON.parse(readFileSync(resolve(raw, f), 'utf8'));

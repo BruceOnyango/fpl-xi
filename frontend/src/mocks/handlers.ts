@@ -3,7 +3,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { db } from './db';
 import type { Horizon } from '@/lib/api/schemas';
 
-const base = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/fpl';
+const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/fpl';
 /** Simulated latency so loading states are visible in dev (0 in tests). */
 const latency = () => (import.meta.env.MODE === 'test' ? 0 : 250 + Math.random() * 350);
 
