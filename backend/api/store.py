@@ -18,7 +18,7 @@ from typing import Any
 
 #: Override with FPL_XI_PROCESSED_DIR to serve artifacts from elsewhere.
 PROCESSED = Path(
-    os.environ.get("FPL_XI_PROCESSED_DIR") or Path(__file__).resolve().parents[2] / "data" / "processed"
+    os.environ.get("FPL_XI_PROCESSED_DIR") or Path(__file__).resolve().parents[1] / "data" / "processed"
 )
 
 

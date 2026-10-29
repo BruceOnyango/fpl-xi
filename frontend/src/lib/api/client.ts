@@ -14,8 +14,17 @@ import {
   type Horizon,
 } from './schemas';
 
-/** The backend's single public entry point (e.g. https://bruceonyango.link/fpl). */
-export const API_BASE: string = import.meta.env.VITE_API_BASE ?? '/fpl';
+/** The backend's single public entry point (e.g. https://example.com/fpl). */
+export const API_BASE: string = import.meta.env.VITE_API_BASE_URL ?? '/fpl';
+
+/**
+ * Worth retrying: network failures and gateway errors (502/504) — e.g. the API restarting
+ * during a `pm2 reload`. Not 404s, contract bugs, or 503 "no predictions exported yet".
+ */
+export function isTransient(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return true;
+  return err.kind === 'network' || err.status === 502 || err.status === 504;
+}
 
 /** HTTP or contract failure, with a message safe to show a human. */
 export class ApiError extends Error {

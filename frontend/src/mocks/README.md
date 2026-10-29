@@ -14,7 +14,7 @@ A typed mock of the backend API (MSW) so the dashboard runs before `backend/api/
 - `handlers.ts` — MSW routes mirroring the planned FastAPI endpoints.
 - `db.ts` — deterministic resolvers; every response carries `source: "mock"`.
 - `browser.ts` / `node.ts` — worker for dev, server for Vitest.
-- `data/snapshot.json` — built by `npm run mock:roster` from `../data/raw/*.json`.
+- `data/snapshot.json` — built by `npm run mock:roster` from `../backend/data/raw/*.json`.
 
 ## Data & dependencies
 
@@ -36,7 +36,7 @@ A typed mock of the backend API (MSW) so the dashboard runs before `backend/api/
 ## How to extend
 
 - New endpoint: add schema → client fn → query key → hook → handler here → resolver in `db.ts`.
-- Refresh the roster: `python scripts/fetch_data.py` (repo root), then `npm run mock:roster`.
+- Refresh the roster: `python scripts/fetch_data.py` (in `backend/`), then `npm run mock:roster`.
 
 ## Open questions / TODO
 

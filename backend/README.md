@@ -1,78 +1,161 @@
-# Dashboard API (`backend/api`)
+# fpl-xi — backend (ML pipeline + API)
 
-## Purpose
-A read-only FastAPI layer the web dashboard (`frontend/`) calls. It joins **live FPL state** with **predictions you export** and never trains.
+> This is the Python half of the `fpl-xi` monorepo. **Run every command below from
+> `backend/`.** The dashboard API lives in [`api/`](api/README.md); the web app is in
+> `../frontend/`.
 
-## Scope / responsibilities
-- **Owns:**
-  - live, cached pulls from the FPL API (prices, injury flags, deadlines, fixtures, a manager's picks/history, mini-leagues)
-  - reading your exported artifacts
-  - the availability gate
-  - the ILP + captain rule on a 15-man squad (the same code `predict_upcoming.py` uses)
-- **Does NOT own:**
-  - training, features or evaluation (that's you, via `scripts/`)
-  - the response contract's frontend twin (`frontend/src/lib/api/schemas.ts`)
+Predict Fantasy Premier League points and pick the best legal starting XI,
+captain and bench — from your own team or the whole player pool. Trained on four
+seasons (~110k player-gameweeks) and validated with a leak-free walk-forward
+backtest.
 
-## Structure
-- `api/main.py`: every route under one prefix, `/fpl` by default (`FPL_API_PREFIX` overrides it), so a reverse proxy forwards that single path untouched. Docs at `/fpl/docs`. Also holds the error handlers. Every error has a human `detail`, which the UI shows as-is.
-- `api/service.py`: assembles responses: availability gate, lineup (ILP), captain/vice, free-transfer estimate, leagues.
-- `api/fpl_live.py`: requests + per-resource TTL cache. Each value remembers when it was pulled, which becomes `dataFetchedAt`.
-- `api/store.py`: reads `data/processed/predictions.json` and `backtest_h<N>.json`, and reloads them when the files change.
-- `api/models.py`: Pydantic response models, camelCase on the wire. **These mirror the frontend Zod schemas; change both together.**
-- `tests/test_api.py`: route tests with a fake FPL client and a temp predictions file. No network.
+Two problems, kept separate:
+1. **Prediction** — rank players by expected points (regression).
+2. **Selection** — pick the optimal legal squad from those rankings (integer
+   linear program, not ML).
 
-## Data & dependencies
+## Measured results
 
-| Route | Source |
-|---|---|
-| `GET /fpl/meta` | live bootstrap (GW, deadline) + predictions/backtest file metadata |
-| `GET /fpl/teams` | live bootstrap |
-| `GET /fpl/players?horizon=1\|3\|6` | live bootstrap + `predictions.json` |
-| `GET /fpl/fixtures?fromGw&toGw` | live `/fixtures/` |
-| `GET /fpl/managers/{id}/squad?horizon` | live entry, history and picks (last finished GW) + predictions → ILP |
-| `GET /fpl/managers/{id}/leagues` | live entry + `/leagues-classic/{id}/standings/` (invitational leagues only, first page) |
-| `GET /fpl/model/backtest?horizon` | `backtest_h<N>.json` (empty series if not saved yet) |
+Expanding-window walk-forward over 147 held-out gameweeks (2024-25 → 2025-26),
+scored on the *started pool* (players with ≥60 min last week — the pool the
+optimiser actually ranks over). Rank correlation (Spearman) is the headline
+metric, because the downstream job is ranking, not point-accuracy.
 
-Cache TTLs: bootstrap 15 min, fixtures 60 min, entry/history 5 min, picks 60 min, leagues 15 min.
+| Model | Spearman | Precision@20 | beats persistence |
+|---|---|---|---|
+| **gbm** | **0.273 ± 0.10** | **0.222** | **90% of GWs** |
+| ridge | 0.274 ± 0.09 | 0.214 | 91% |
+| persistence (last GW) | 0.112 ± 0.09 | 0.128 | — |
+| mean | — | 0.121 | 0% |
 
-## Key decisions & rationale
-- **No training in the API, by design.** You retrain and export on your own schedule; the API just serves what you exported.
-- **Prices and injury flags are live, not from the export,** so the availability gate uses the freshest status. Players flagged out show 0 predicted points rather than phantom points.
-- **The prediction interval is out-of-sample.** `export_predictions.py` fits on 85% of rows; each player's range is the 10th–90th percentile of what the 150 held-out rows with the nearest predictions actually scored. That makes it smooth, so Haaland and Rice get different ranges; a coarse 5-bin version gave every top player the same one.
-- **The team range combines player spreads in quadrature.** Eleven players won't all hit their ceiling at once.
-- **Public-data approximations,** because FPL only exposes these to the logged-in owner:
-  - free transfers are *estimated* from public history (+1 per GW, max 5; wildcard/free hit don't consume)
-  - selling price is the current price
-- **The squad is read from the last finished GW.** The upcoming team is private before the deadline; this is the same caveat as the CLI.
+- gbm beats "predict last gameweek's points" by **+0.16 Spearman on average,
+  winning 90% of 147 gameweeks** — a real, consistent, leak-free edge.
 
-## States
-- **No `predictions.json`:** `/players` and `/managers/*/squad` return 503 with the exact command to run. `/meta` still works (`predictionsGeneratedAt: null`).
-- **Predictions older than the next GW:** the frontend shows a banner with the export command.
-- **FPL API down:** 502. **Bad team ID:** 404 ("Check it and try again").
+**On the sample:** 0.273 is the 4-season average (the conservative, headline
+figure). Single-season slices run higher — e.g. **~0.32 on 2024-25 alone**
+(`--test-seasons 2024-25`) — because one season is a more homogeneous test set.
+The spread across seasons (±0.10 per-GW std) is itself a reminder that the edge,
+while consistent in direction, varies week to week. The 4-season number is
+reported first on purpose: it's the least cherry-picked.
 
-## How to extend
-- **New field:** add it to `models.py` *and* `frontend/src/lib/api/schemas.ts`, populate it in `service.py`, and add a test.
-- **New route:** add it to `main.py` → `service.py`, then the frontend client, query key and hook (see `frontend/src/mocks/README.md`).
+- **Horizon lifts it further.** Predicting the *next 6 gameweeks* instead of one
+  raises started-pool Spearman to **~0.47** (and ~0.40 at a 3-GW horizon), and
+  beats persistence in **100%** of weeks — longer horizons average out
+  single-match noise and are the right basis for transfer planning.
 
-## Open questions / TODO
-- League standings show page 1 only (50 entries).
-- Phase 2: a scheduled `fetch_data → export_predictions` job, so predictions keep up with the deadline without manual runs.
-
-## Run
-
+Reproduce it yourself:
 ```bash
-# once per data refresh / retrain (you):
-python scripts/fetch_data.py
-python scripts/export_predictions.py --gw 9
-python scripts/evaluate.py --horizon 1 --save     # optional: fills the "how much to trust this" panel
-
-# serve (repo root):
-python -m uvicorn backend.api.main:app --reload --port 8000
-
-# frontend (another terminal):
-cd frontend && cp .env.example .env.local && npm run dev   # http://localhost:5173/fantasy-league/, proxies /fpl → :8000
+python scripts/evaluate.py                       # single-GW, all seasons: ~0.27, 90% win
+python scripts/evaluate.py --test-seasons 2024-25  # one season: ~0.32
+python scripts/evaluate.py --horizon 6           # 6-GW outlook: ~0.47, 100% win
 ```
 
-Tests: `python -m pytest backend/tests`.
+## Honest ceiling
 
-Production (bruceonyango.link/fpl behind nginx or Apache): see [`../deploy/README.md`](../deploy/README.md).
+Single-gameweek football is mostly luck: ~0.27 Spearman means the model explains
+a modest slice of one week, and the rest is irreducible (deflections, red cards,
+a keeper howler). The win is a **consistent edge over many weeks**, not a correct
+lineup every Saturday. The two things that actually moved the number were **more
+data** and a **longer horizon** — not cleverer features (see below).
+
+## What didn't work (measured, then dropped)
+
+Every "add a smarter feature/objective" idea was prototyped and killed by the
+backtest before being wired in:
+
+- **Opponent-adjusted rolling fixture features** — 0.315 → 0.310 (no gain).
+  Over one match, who you play is swamped by whether you play.
+- **Rolling-minutes / start-rate features** — 0.315 → 0.317, started-pool MAE
+  2.18 → 2.18 (no gain). `minutes_lag_1` already carries the signal.
+- **Pairwise ranker (LGBMRanker/lambdarank)** — 0.317 → 0.204 (*worse*). FPL
+  points make poor ranking labels (heavy ties at 1-3 pts).
+- **Upside-tilt captaincy** — a wash vs plain argmax; the keeper-captain bug was
+  a thin-data artifact, not a model flaw.
+
+These nulls are the point: the single-GW model is at its information ceiling with
+the available features, and we have the receipts.
+
+## Setup
+
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate        # Windows  (macOS/Linux: source .venv/bin/activate)
+python -m pip install -r requirements-dev.txt    # runtime + pytest/ruff/pip-audit
+# optional: python -m pip install -r requirements-optional.txt  (torch neural model, anthropic)
+```
+Python 3.12 (`.python-version`). `requirements.txt` pins the direct runtime
+dependencies to the versions the tests and the live API run on.
+> On Windows always use `python -m pip` / `python -m pytest` so they hit the venv.
+
+## Usage
+
+```bash
+# one-time data
+python scripts/fetch_data.py          # current-season data from the FPL API
+python scripts/build_dataset.py       # leak-free current-season dataset
+python scripts/build_historical.py    # 4 past seasons (~110k rows) from the archive
+
+# pick your team for an upcoming gameweek (6-week outlook, injuries screened)
+python scripts/predict_upcoming.py --gw 8 --team-id 8350133 --horizon 6
+
+# evaluate / explore
+python scripts/evaluate.py --horizon 6      # the backtest numbers above
+python scripts/select_xi.py --model gbm --backtest 4 5 6
+python scripts/sweep_budget.py --model gbm  # points-vs-budget curve
+python -m pytest                             # leakage, optimiser, intervals, API tests
+ruff check .                                 # lint (syntax + pyflakes; see ruff.toml)
+
+# feed the dashboard API (see api/README.md)
+python scripts/export_predictions.py --gw 9  # → data/processed/predictions.json
+python scripts/evaluate.py --horizon 1 --save
+python -m api                                # http://127.0.0.1:8011/fpl/docs
+```
+
+### predict_upcoming inputs
+- `--team-id N` — load your 15 from the FPL API (as of the last finished GW).
+  `--team-event G` forces a specific gameweek's squad; `--out/--in "A,B"` apply
+  this week's transfers on top.
+- `--squad "Name1,...,Name15"` — names manually (FPL `web_name`).
+- `--squad-image team.png` — read a screenshot via Claude vision (needs
+  `anthropic` + `ANTHROPIC_API_KEY`).
+- `--horizon N` — pick the squad on an N-gameweek outlook (captaincy stays 1-GW).
+- `--min-chance P` — drop doubtful players below P% chance of playing
+  (`--no-availability` skips the injury gate, e.g. when scoring a past GW).
+
+## Architecture (SOLID)
+
+Concrete classes sit behind `Protocol`s in `src/fpl/protocols.py`; high-level
+code depends only on those, and the scripts are the composition root.
+
+| Layer | Responsibility | Extend by |
+|---|---|---|
+| `data/`, `api/` | fetch/cache raw data; a manager's squad by ID | new `DataSource` |
+| `features/` | leak-free (X, y) matrix | new `FeatureBuilder` |
+| `models/` | predict points (baseline, ridge, gbm, neural) | `@register` a `PointsPredictor` |
+| `optimization/` | select the XI under FPL rules | new `Constraint` / `SquadOptimizer` |
+| `selection/` | availability gate, captaincy | new filter |
+| `evaluation/` | walk-forward backtest | — |
+
+Maths behind each piece (ILP / 0-1 knapsack, ridge/L2, gradient boosting, the
+MLP + Adam, leakage-free lagging, walk-forward validation) is documented in
+comment blocks in the relevant files.
+
+## Limitations
+
+- FPL points are noisy; this is a season-long edge, not weekly certainty.
+- Injury flags are a live snapshot — re-run `fetch_data.py` near the deadline.
+- Double/blank gameweeks are not modelled yet.
+- The FPL API and the historical archive are unofficial; cache politely. Not
+  affiliated with the Premier League or FPL.
+
+## Data & credits
+
+- Live data: the official FPL API (`fantasy.premierleague.com/api`).
+- Historical seasons: the
+  [vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League)
+  archive.
+
+## License
+
+MIT .

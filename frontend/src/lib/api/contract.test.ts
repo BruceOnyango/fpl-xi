@@ -37,3 +37,15 @@ describe('API contract (mock backend)', () => {
     expect(backtest.series.length).toBeGreaterThan(0);
   });
 });
+
+describe('isTransient (retry policy)', () => {
+  it('retries network and gateway errors only', async () => {
+    const { ApiError, isTransient } = await import('./client');
+    expect(isTransient(new ApiError('x', 'network'))).toBe(true);
+    expect(isTransient(new ApiError('x', 'http', 502))).toBe(true);
+    expect(isTransient(new ApiError('x', 'http', 504))).toBe(true);
+    expect(isTransient(new ApiError('x', 'http', 404))).toBe(false);
+    expect(isTransient(new ApiError('x', 'http', 503))).toBe(false);
+    expect(isTransient(new ApiError('x', 'contract'))).toBe(false);
+  });
+});

@@ -1,9 +1,27 @@
+# --- monorepo-level ---
+/logs/
+/brag*
+.env
+.env.*.local
+
+# --- backend (Python) ---
 __pycache__/
 *.pyc
 .venv/
-data/raw/*.json
-data/processed/*.parquet
-*.pt
 .pytest_cache/
-/brag*
-data/processed/*.json
+.ruff_cache/
+*.pt
+backend/data/raw/*.json
+backend/data/processed/*.parquet
+backend/data/processed/*.json
+
+# frontend/ has its own .gitignore (node_modules, dist, …)
+
+# Personal, machine-local files (deploy runbook, real proxy configs with your domain) — never committed
+*.local.md
+*.local.conf
+/deploy*
+*/.DEPLOYMENT.md
+# Deployment files: keep on this machine only
+/deploy/
+/DEPLOYMENT.md

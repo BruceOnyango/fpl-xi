@@ -7,10 +7,10 @@ from datetime import datetime, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-import backend.api.main as main
-from backend.api.fpl_live import FplNotFound, Pulled
-from backend.api.service import Service
-from backend.api.store import ArtifactStore
+import api.main as main
+from api.fpl_live import FplNotFound, Pulled
+from api.service import Service
+from api.store import ArtifactStore
 
 NOW = datetime(2026, 10, 29, 12, tzinfo=timezone.utc)
 
@@ -35,6 +35,9 @@ def _elements():
 
 
 class FakeLive:
+    def peek(self, key):
+        return self.bootstrap() if key == "bootstrap" else None
+
     def bootstrap(self):
         return Pulled(
             {
@@ -191,3 +194,23 @@ def test_routes_live_under_the_single_prefix(client):
     assert c.get("/fpl/meta").status_code == 200
     assert c.get("/api/meta").status_code == 404  # nothing outside the prefix
     assert c.get("/fpl/openapi.json").status_code == 200
+
+
+def test_health_reports_version_and_freshness_without_calling_fpl(client):
+    c, root = client
+    body = c.get("/fpl/health").json()
+    assert body["status"] == "ok" and body["version"] and body["uptimeS"] >= 0
+    assert body["dataFetchedAt"] is not None and body["predictionsGeneratedAt"] is None
+    assert c.get("/fpl/ready").status_code == 503  # no predictions yet → not ready
+    _write_predictions(root)
+    ready = c.get("/fpl/ready")
+    assert ready.status_code == 200 and ready.json()["predictionsGw"] == 9
+
+
+def test_cors_allows_only_configured_origins(client):
+    c, _ = client
+    ok = c.get("/fpl/meta", headers={"Origin": "http://localhost:3011"})
+    assert ok.headers.get("access-control-allow-origin") == "http://localhost:3011"
+    evil = c.get("/fpl/meta", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in evil.headers
+

@@ -42,7 +42,7 @@ function DataNotice() {
       </p>
     );
   }
-  const command = `python scripts/export_predictions.py --gw ${d.nextGw}`;
+  const command = `cd backend && python scripts/export_predictions.py --gw ${d.nextGw}`;
   if (d.predictionsGw === null || d.predictionsGw < d.nextGw) {
     return (
       <p
@@ -76,7 +76,7 @@ function SidebarFooter() {
           ? `${m.spearman.toFixed(2)} Spearman over ${m.heldOutGameweeks} held-out GWs.`
           : meta.isPending
             ? 'Loading model info…'
-            : 'No backtest saved yet (evaluate.py --save).'}
+            : 'No backtest saved yet (backend: evaluate.py --save).'}
       </p>
       <p className="mt-1">A season-long edge, not weekly certainty.</p>
     </div>
