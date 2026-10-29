@@ -1,0 +1,31 @@
+# systemd unit for the dashboard API.
+# Install: sudo cp deploy/fpl-api.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now fpl-api
+# Logs:    journalctl -u fpl-api -f
+#
+# Adjust User and the /srv/fpl-best11 paths to where the repo lives on the server.
+
+[Unit]
+Description=FPL XI dashboard API (read-only; serves exported predictions + live FPL data)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/srv/fpl-best11
+Environment=FPL_API_PREFIX=/fpl
+# Bound to localhost only — nginx/Apache is the public entry point.
+# One worker: the FPL cache is in-process, so more workers = more calls to FPL.
+ExecStart=/srv/fpl-best11/.venv/bin/uvicorn backend.api.main:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=5
+
+# Hardening: the API only needs to read the repo.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadOnlyPaths=/srv/fpl-best11
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

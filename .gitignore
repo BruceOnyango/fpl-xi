@@ -6,3 +6,4 @@ data/processed/*.parquet
 *.pt
 .pytest_cache/
 /brag*
+data/processed/*.json
