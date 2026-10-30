@@ -25,3 +25,4 @@ backend/data/processed/*.json
 # Deployment files: keep on this machine only
 /deploy/
 /DEPLOYMENT.md
+/backend/scripts/weekly_refresh.sh
