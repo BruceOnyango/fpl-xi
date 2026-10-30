@@ -98,7 +98,7 @@ export function PlayerTable({
                 news={p.news}
               />
               <BanRiskFlag
-                variant="icon"
+                variant="compact"
                 yellowCards={p.yellowCards}
                 oneYellowFromBan={p.oneYellowFromBan}
               />

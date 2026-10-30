@@ -124,7 +124,7 @@ export default function TransfersPage() {
                                       {p.webName}
                                     </span>
                                     <BanRiskFlag
-                                      variant="icon"
+                                      variant="compact"
                                       yellowCards={p.yellowCards}
                                       oneYellowFromBan={p.oneYellowFromBan}
                                     />

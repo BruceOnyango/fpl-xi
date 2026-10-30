@@ -57,7 +57,7 @@ export function SquadList({
                       news={p.news}
                     />
                     <BanRiskFlag
-                      variant="icon"
+                      variant="compact"
                       yellowCards={p.yellowCards}
                       oneYellowFromBan={p.oneYellowFromBan}
                     />

@@ -99,7 +99,7 @@ export function ReplacementPicker({
                         showAvatar={false}
                       />
                       <BanRiskFlag
-                        variant="icon"
+                        variant="compact"
                         yellowCards={p.yellowCards}
                         oneYellowFromBan={p.oneYellowFromBan}
                         className="mr-auto"

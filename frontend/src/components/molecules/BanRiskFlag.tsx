@@ -4,8 +4,11 @@ export interface BanRiskFlagProps {
   yellowCards: number;
   /** From the API: one more booking next GW triggers a suspension. */
   oneYellowFromBan: boolean;
-  /** `icon` for tight rows and pitch tokens (label goes to sr-only + title). */
-  variant?: 'full' | 'icon';
+  /**
+   * `full` for cards; `compact` for list rows (card + short label);
+   * `icon` for pitch tokens (label goes to sr-only + title).
+   */
+  variant?: 'full' | 'compact' | 'icon';
   className?: string;
 }
 
@@ -38,6 +41,20 @@ export function BanRiskFlag({
       <span title={title} className={cn('inline-flex', className)}>
         <YellowCard />
         <span className="sr-only">{title}</span>
+      </span>
+    );
+  }
+  if (variant === 'compact') {
+    return (
+      <span
+        title={title}
+        className={cn(
+          'text-2xs text-warning inline-flex shrink-0 items-center gap-1 font-semibold whitespace-nowrap',
+          className,
+        )}
+      >
+        <YellowCard />1 yellow from ban
+        <span className="sr-only">: on {yellowCards} yellow cards</span>
       </span>
     );
   }
