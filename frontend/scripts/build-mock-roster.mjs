@@ -63,6 +63,7 @@ const snapshot = {
       minutes: num(p.minutes),
       xg: num(p.expected_goals),
       xa: num(p.expected_assists),
+      yellowCards: num(p.yellow_cards),
     })),
 };
 

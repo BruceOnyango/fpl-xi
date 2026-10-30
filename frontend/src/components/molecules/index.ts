@@ -1,4 +1,5 @@
 export * from './AvailabilityFlag';
+export * from './BanRiskFlag';
 export * from './DataFreshness';
 export * from './DeadlineCountdown';
 export * from './FixtureChip';

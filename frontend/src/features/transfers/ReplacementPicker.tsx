@@ -1,7 +1,13 @@
 import { X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button, Card, CardBody, CardHeader, PriceTag } from '@/components/atoms';
-import { EmptyState, PlayerName, PredictionRange, SearchField } from '@/components/molecules';
+import {
+  BanRiskFlag,
+  EmptyState,
+  PlayerName,
+  PredictionRange,
+  SearchField,
+} from '@/components/molecules';
 import type { Player } from '@/lib/api/schemas';
 import { formatPrice } from '@/lib/format';
 import { availabilityOf } from '@/lib/fpl/players';
@@ -91,6 +97,12 @@ export function ReplacementPicker({
                         teamShort={teamShort(p.teamId)}
                         position={p.position}
                         showAvatar={false}
+                      />
+                      <BanRiskFlag
+                        variant="icon"
+                        yellowCards={p.yellowCards}
+                        oneYellowFromBan={p.oneYellowFromBan}
+                        className="mr-auto"
                       />
                       <PriceTag price={p.price} />
                     </div>

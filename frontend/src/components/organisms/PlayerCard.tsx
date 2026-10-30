@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { Button, Card, FormDot, PriceTag } from '@/components/atoms';
 import {
   AvailabilityFlag,
+  BanRiskFlag,
   BlankFixtureChip,
   FixtureChip,
   PlayerName,
@@ -66,6 +67,7 @@ export function PlayerCard({
         ) : null}
       </div>
       <AvailabilityFlag status={p.status} chanceOfPlaying={p.chanceOfPlaying} news={p.news} />
+      <BanRiskFlag yellowCards={p.yellowCards} oneYellowFromBan={p.oneYellowFromBan} />
       <div>
         <p className="text-muted mb-1 text-xs font-medium">Predicted · {horizonLabel}</p>
         <PredictionRange prediction={p.prediction} max={predictionMax} />

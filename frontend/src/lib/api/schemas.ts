@@ -75,6 +75,9 @@ export const playerSchema = z.object({
   minutes: z.number(),
   xg: z.number(),
   xa: z.number(),
+  yellowCards: z.number().int(),
+  /** One more booking next GW triggers a ban (backend: api/service.py BAN_THRESHOLDS). */
+  oneYellowFromBan: z.boolean(),
   prediction: predictionSchema,
 });
 export type Player = z.infer<typeof playerSchema>;

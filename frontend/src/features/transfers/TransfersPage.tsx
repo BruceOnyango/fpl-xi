@@ -11,6 +11,7 @@ import {
   Skeleton,
 } from '@/components/atoms';
 import {
+  BanRiskFlag,
   DataFreshness,
   EmptyState,
   InjuryNudge,
@@ -122,6 +123,11 @@ export default function TransfersPage() {
                                     <span className="min-w-0 flex-1 truncate font-semibold">
                                       {p.webName}
                                     </span>
+                                    <BanRiskFlag
+                                      variant="icon"
+                                      yellowCards={p.yellowCards}
+                                      oneYellowFromBan={p.oneYellowFromBan}
+                                    />
                                     <span className="text-muted text-xs">
                                       {fixtureContext.teamShort(p.teamId)}
                                     </span>

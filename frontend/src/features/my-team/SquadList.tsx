@@ -1,5 +1,5 @@
 import { PriceTag } from '@/components/atoms';
-import { AvailabilityFlag, PlayerName, PredictionRange } from '@/components/molecules';
+import { AvailabilityFlag, BanRiskFlag, PlayerName, PredictionRange } from '@/components/molecules';
 import type { Position } from '@/lib/api/schemas';
 import type { SquadView } from '@/lib/api/views';
 
@@ -55,6 +55,11 @@ export function SquadList({
                       status={p.status}
                       chanceOfPlaying={p.chanceOfPlaying}
                       news={p.news}
+                    />
+                    <BanRiskFlag
+                      variant="icon"
+                      yellowCards={p.yellowCards}
+                      oneYellowFromBan={p.oneYellowFromBan}
                     />
                   </div>
                   <PredictionRange prediction={p.prediction} max={max} />

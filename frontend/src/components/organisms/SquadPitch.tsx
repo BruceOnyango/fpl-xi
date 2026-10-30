@@ -1,5 +1,5 @@
 import { Armchair } from 'lucide-react';
-import { AvailabilityFlag, FixtureChip, PitchPlayer } from '@/components/molecules';
+import { AvailabilityFlag, BanRiskFlag, FixtureChip, PitchPlayer } from '@/components/molecules';
 import type { SlotView } from '@/lib/api/views';
 import { availabilityOf } from '@/lib/fpl/players';
 import { pitchRows } from '@/lib/fpl/lineup';
@@ -63,6 +63,9 @@ export function SquadPitch({
               chanceOfPlaying={s.player.chanceOfPlaying}
               news={s.player.news}
             />
+          ) : s.player.oneYellowFromBan ? (
+            // One badge slot on the token: availability wins, the card warning is next.
+            <BanRiskFlag variant="icon" yellowCards={s.player.yellowCards} oneYellowFromBan />
           ) : undefined
         }
         dimmed={onBench && (excludedIds?.has(s.player.id) ?? false)}

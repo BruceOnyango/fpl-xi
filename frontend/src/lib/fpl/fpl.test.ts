@@ -2,7 +2,7 @@ import type { Fixture, Player, Position } from '@/lib/api/schemas';
 import { averageDifficulty, fixtureRun, fixturesForTeam } from './fixtures';
 import { assessFreshness } from './freshness';
 import { solveLineup, pitchRows, type Candidate } from './lineup';
-import { availabilityOf, flaggedPlayers, valueScore } from './players';
+import { availabilityOf, flaggedPlayers, oneYellowFromBan, valueScore } from './players';
 import { simulateTransfers, validateSquad } from './rules';
 
 const HOUR = 3_600_000;
@@ -26,6 +26,8 @@ function player(id: number, position: Position, overrides: Partial<Player> = {})
     minutes: 450,
     xg: 0,
     xa: 0,
+    yellowCards: 0,
+    oneYellowFromBan: false,
     prediction: { points: 3, low: 1, high: 6 },
     ...overrides,
   };
@@ -207,5 +209,15 @@ describe('players', () => {
   });
   it('computes value per £m', () => {
     expect(valueScore({ price: 5, prediction: { points: 10, low: 0, high: 0 } })).toBe(2);
+  });
+});
+
+describe('oneYellowFromBan', () => {
+  it('mirrors the backend thresholds', () => {
+    expect(oneYellowFromBan(4, 19)).toBe(true);
+    expect(oneYellowFromBan(4, 20)).toBe(false); // 5-yellow rule ends at GW19
+    expect(oneYellowFromBan(9, 32)).toBe(true);
+    expect(oneYellowFromBan(14, 38)).toBe(true);
+    expect(oneYellowFromBan(3, 9)).toBe(false);
   });
 });
