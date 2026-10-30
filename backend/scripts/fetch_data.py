@@ -27,6 +27,12 @@ def main() -> None:
     repo.save("players", players)
     print(f"  {len(players)} players cached.")
 
+    # Teams (strength ratings) and events (deadlines) — needed by build_dataset,
+    # predict_upcoming and export_predictions. Saved every run so they never go stale.
+    repo.save("teams", source.fetch_teams())
+    repo.save("events", source.fetch_events())
+    print("  teams + events cached.")
+
     print("Fetching per-gameweek history (a few minutes)…")
     history: dict[str, list[dict]] = {}
     for n, player in enumerate(players, 1):
