@@ -19,6 +19,8 @@ const p = (id: number, over: Partial<Player>): Player => ({
   minutes: 0,
   xg: 0,
   xa: 0,
+  yellowCards: 0,
+  oneYellowFromBan: false,
   prediction: { points: 0, low: 0, high: 0 },
   ...over,
 });

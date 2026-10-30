@@ -10,7 +10,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { FormDot } from '@/components/atoms';
-import { AvailabilityFlag, PlayerName, PredictionRange } from '@/components/molecules';
+import { AvailabilityFlag, BanRiskFlag, PlayerName, PredictionRange } from '@/components/molecules';
 import type { Player } from '@/lib/api/schemas';
 import { formatPercent, formatPrice } from '@/lib/format';
 import { valueScore } from '@/lib/fpl/players';
@@ -96,6 +96,11 @@ export function PlayerTable({
                 status={p.status}
                 chanceOfPlaying={p.chanceOfPlaying}
                 news={p.news}
+              />
+              <BanRiskFlag
+                variant="icon"
+                yellowCards={p.yellowCards}
+                oneYellowFromBan={p.oneYellowFromBan}
               />
             </span>
           );

@@ -24,6 +24,15 @@ OUT_STATUS = {"i", "s", "u", "n"}
 #: Same default as predict_upcoming --min-chance.
 MIN_CHANCE = 75
 ZERO = PlayerPrediction(0.0, 0.0, 0.0, 0.0)
+#: Premier League yellow-card bans: (yellows, last GW the count applies to). Reaching the
+#: count within that window means a ban. The rule counts a club's matches, not GWs;
+#: the GW is a close-enough proxy (blanks/doubles shift it by a game or so).
+BAN_THRESHOLDS = ((5, 19), (10, 32), (15, 38))
+
+
+def one_yellow_from_ban(yellows: int, next_gw: int) -> bool:
+    """True if one more booking in `next_gw` would trigger a suspension."""
+    return any(yellows == n - 1 and next_gw <= last for n, last in BAN_THRESHOLDS)
 
 
 class NoPredictions(Exception):
@@ -79,7 +88,7 @@ class Service:
             return f"{name} has a {ch}% chance of playing"
         return None
 
-    def _player(self, el: dict, pred: PlayerPrediction) -> m.Player:
+    def _player(self, el: dict, pred: PlayerPrediction, next_gw: int) -> m.Player:
         if el.get("status") in OUT_STATUS:
             # Ruled out: the model can't see that, but we can. Don't show phantom points.
             pred = ZERO
@@ -101,6 +110,10 @@ class Service:
             minutes=_f(el.get("minutes")),
             xg=_f(el.get("expected_goals")),
             xa=_f(el.get("expected_assists")),
+            yellow_cards=int(el.get("yellow_cards") or 0),
+            # Already banned players are flagged "s" by FPL; no point warning about them too.
+            one_yellow_from_ban=el.get("status") != "s"
+            and one_yellow_from_ban(int(el.get("yellow_cards") or 0), next_gw),
             prediction=m.Prediction(points=pred.points, low=pred.low, high=pred.high),
         )
 
@@ -152,12 +165,13 @@ class Service:
     def players(self, horizon: int) -> m.PlayersResponse:
         p = self._preds()
         preds = p.by_horizon.get(horizon, {})
+        _, next_gw, _ = self._gw_state()
         return m.PlayersResponse(
             data_fetched_at=self.live.bootstrap().fetched_at,
             predictions_generated_at=p.generated_at,
             gw=p.gw,
             horizon=horizon,
-            players=[self._player(el, preds.get(el["id"], ZERO)) for el in self._elements()],
+            players=[self._player(el, preds.get(el["id"], ZERO), next_gw) for el in self._elements()],
         )
 
     def fixtures(self, from_gw: int, to_gw: int) -> m.FixturesResponse:

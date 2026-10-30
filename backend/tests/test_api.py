@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 import api.main as main
 from api.fpl_live import FplNotFound, Pulled
-from api.service import Service
+from api.service import Service, one_yellow_from_ban
 from api.store import ArtifactStore
 
 NOW = datetime(2026, 10, 29, 12, tzinfo=timezone.utc)
@@ -31,6 +31,8 @@ def _elements():
         )
     els[14]["status"] = "i"  # a forward is injured → availability gate
     els[14]["news"] = "Hamstring"
+    els[5]["yellow_cards"] = 4  # one booking from a ban (next GW is 9, before the GW19 cutoff)
+    els[6]["yellow_cards"] = 5  # past the threshold: already served (or serving) the ban
     return els
 
 
@@ -128,6 +130,15 @@ def test_players_require_exported_predictions(client):
     injured = next(p for p in body["players"] if p["id"] == 15)
     assert injured["prediction"] == {"points": 0.0, "low": 0.0, "high": 0.0}  # gated, not phantom points
     assert body["players"][0]["teamId"] == 2  # camelCase on the wire
+    risk = {p["id"]: (p["yellowCards"], p["oneYellowFromBan"]) for p in body["players"]}
+    assert risk[6] == (4, True) and risk[7] == (5, False) and risk[1] == (0, False)
+
+
+def test_one_yellow_from_ban_thresholds():
+    assert one_yellow_from_ban(4, 19) and not one_yellow_from_ban(4, 20)  # 5-yellow rule ends at GW19
+    assert one_yellow_from_ban(9, 32) and not one_yellow_from_ban(9, 33)
+    assert one_yellow_from_ban(14, 38)
+    assert not one_yellow_from_ban(3, 9) and not one_yellow_from_ban(5, 9)
 
 
 def test_manager_squad_solves_a_legal_lineup(client):

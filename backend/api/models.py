@@ -62,6 +62,9 @@ class Player(Model):
     minutes: float
     xg: float
     xa: float
+    yellow_cards: int
+    #: One more booking next GW triggers a ban (5 by GW19, 10 by GW32, 15 any time).
+    one_yellow_from_ban: bool
     prediction: Prediction
 
 

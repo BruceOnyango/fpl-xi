@@ -11,7 +11,7 @@
  */
 import snapshot from './data/snapshot.json';
 import { solveLineup, type Candidate } from '@/lib/fpl/lineup';
-import { OUT_STATUSES } from '@/lib/fpl/players';
+import { OUT_STATUSES, oneYellowFromBan } from '@/lib/fpl/players';
 import type {
   BacktestResponse,
   Fixture,
@@ -28,9 +28,14 @@ import type {
   TeamsResponse,
 } from '@/lib/api/schemas';
 
-type SnapshotPlayer = Omit<Player, 'prediction' | 'status' | 'position'> & {
+type SnapshotPlayer = Omit<
+  Player,
+  'prediction' | 'status' | 'position' | 'yellowCards' | 'oneYellowFromBan'
+> & {
   status: string;
   position: string;
+  /** Older snapshots predate this field; see mockYellows. */
+  yellowCards?: number;
 };
 
 const SOURCE = 'mock' as const;
@@ -40,12 +45,18 @@ const roster = (snapshot.players as SnapshotPlayer[]).map((p) => ({
   ...p,
   status: p.status as PlayerStatus,
   position: p.position as Position,
+  yellowCards: p.yellowCards ?? mockYellows(p.id, p.minutes),
 }));
 const dataFetchedAt = snapshot.sourceFetchedAt;
 /** Pretend the model ran an hour after the data pull. */
 const predictionsGeneratedAt = new Date(Date.parse(dataFetchedAt) + 3_600_000).toISOString();
 
 /* ---------------- seeded randomness ---------------- */
+
+/** Deterministic stand-in for snapshots without card data: ~1 yellow per 400 minutes. */
+function mockYellows(id: number, minutes: number): number {
+  return Math.floor((minutes / 400) * mulberry32(id * 7)() * 2);
+}
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -158,7 +169,11 @@ function playersFor(horizon: Horizon): Player[] {
   const cached = predictionCache.get(horizon);
   if (cached) return cached;
   const { nextGw } = gameweekState();
-  const players = roster.map((p) => ({ ...p, prediction: predictOne(p, horizon, nextGw) }));
+  const players = roster.map((p) => ({
+    ...p,
+    oneYellowFromBan: p.status !== 's' && oneYellowFromBan(p.yellowCards, nextGw),
+    prediction: predictOne(p, horizon, nextGw),
+  }));
   predictionCache.set(horizon, players);
   return players;
 }
